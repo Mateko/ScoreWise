@@ -20,5 +20,11 @@ class Metrics:
     def ks(predicted, target):
         return ks_2samp(predicted, target)[0]
 
+    def gini_iv(self, df, x, y):
+        return {
+            'gini': self.gini(df, x, y),
+            'iv': self.woe_iv(df, x, y)['iv'].sum()
+        }
+
 
 metrics = Metrics()

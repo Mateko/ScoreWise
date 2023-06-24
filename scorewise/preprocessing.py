@@ -13,6 +13,7 @@ class Preprocessing:
     cat_columns: list = field(default_factory=lambda: [])
     binning_results: dict = field(default_factory=lambda: {})
     bins: dict = field(default_factory=lambda: {})
+    discrete_col_names: list = field(default_factory=lambda: [])
 
     def check_variable_types(self):
         for col, col_type in zip(self.df.columns, self.df.dtypes):
@@ -22,8 +23,6 @@ class Preprocessing:
 
             if col_type != 'object' and col not in self.preprocessing_columns and col != self.default:
                 self.preprocessing_columns.append(col)
-
-        print('numerical_cols:', self.preprocessing_columns)
 
     def drop_null_values(self):
         self.df.dropna(inplace=True)
@@ -39,7 +38,7 @@ class Preprocessing:
         return concat([qcut(self.df[column], quant, duplicates='drop'), self.df[self.default]], axis=1)
 
     def test_quants(self):
-        if len(self.preprocessing_columns)  < 1:
+        if len(self.preprocessing_columns) < 1:
             raise ValueError('Firstly check column types')
 
         for column in self.preprocessing_columns:
@@ -50,7 +49,7 @@ class Preprocessing:
                         'no_bins': [quant],
                         'gini': [metrics.gini(_df, column, self.default)],
                         'iv': [metrics.woe_iv(_df, column, self.default)['iv'].sum()],
-                        'bins': [x for x in _df[column].unique()]
+                        'bins': [bin_ for bin_ in _df[column].unique()]
                     }
                 else:
                     self.binning_results[column]['no_bins'].append(quant)
@@ -75,7 +74,7 @@ class Preprocessing:
                 'bins': self.binning_results[col]['bins'][index]
             }
 
-            print(col, metric,  self.bins[col][metric], 'no_of_bins: ', self.bins[col]['no_bins'])
+            print(col, metric, self.bins[col][metric], 'no_of_bins: ', self.bins[col]['no_bins'])
 
     def bin_data(self):
         if len(self.bins) < 1:
@@ -89,10 +88,27 @@ class Preprocessing:
 
         return self.df
 
+    def get_binned_cols(self):
+        binned_cols = [c for c in self.df.columns if c.split('_')[-1] == 'binned']
+        if len(binned_cols) > 0:
+            return binned_cols
+        else:
+            raise ValueError('There is no binned data')
+
     def create_dummies_cols(self, dummies_for_na=False):
         _ = []
-        for col in [c for c in self.df.columns if c.split('_')[-1] == 'binned']:
+        for col in self.get_binned_cols():
             _.append(get_dummies(self.df[col], prefix=f'{col}', dtype='int', dummy_na=dummies_for_na))
 
         return concat(_, axis=1)
 
+    def create_discrete_cols(self):
+        _ = []
+        for col in self.get_binned_cols():
+            transformed = self.df[col].cat.codes
+            new_col_name = f'{col}_[{transformed.min()},{transformed.max()}'
+            self.discrete_col_names.append(new_col_name)
+
+            _.append(DataFrame(transformed, columns=[new_col_name]))
+
+        return concat(_, axis=1)
